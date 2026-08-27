@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import {
+  estimatedRangeCm,
+  MAX_AGE,
+  MIN_AGE,
+  predictAdultHeightCm,
+  type ChildSex,
+} from "../lib/khamisRoche";
 
-type Gender = "boy" | "girl";
 type Unit = "cm" | "ft";
-
-const HEIGHT_ADJUSTMENT_CM = 13;
-const ESTIMATED_RANGE_CM = 8;
 
 function feetInchesToCm(feet: number, inches: number) {
   return (feet * 12 + inches) * 2.54;
@@ -27,9 +30,24 @@ function cmToFeetInches(cm: number) {
   return { feet, inches };
 }
 
+function kgToLb(kg: number) {
+  return kg * 2.2046226218;
+}
+
+function lbToKg(lb: number) {
+  return lb / 2.2046226218;
+}
+
 export default function ChildHeightCalculatorPage() {
   const [unit, setUnit] = useState<Unit>("cm");
-  const [gender, setGender] = useState<Gender>("boy");
+  const [gender, setGender] = useState<ChildSex>("boy");
+
+  const [age, setAge] = useState("");
+  const [childCm, setChildCm] = useState("");
+  const [childFeet, setChildFeet] = useState("");
+  const [childInches, setChildInches] = useState("");
+  const [weightKg, setWeightKg] = useState("");
+  const [weightLb, setWeightLb] = useState("");
 
   const [fatherCm, setFatherCm] = useState("");
   const [motherCm, setMotherCm] = useState("");
@@ -48,68 +66,146 @@ export default function ChildHeightCalculatorPage() {
     return cmToFeetInches(result);
   }, [result]);
 
-  const minHeight = result !== null ? result - ESTIMATED_RANGE_CM : null;
-  const maxHeight = result !== null ? result + ESTIMATED_RANGE_CM : null;
+  const rangeCm = estimatedRangeCm(gender);
+  const minHeight = result !== null ? result - rangeCm : null;
+  const maxHeight = result !== null ? result + rangeCm : null;
 
   function isValidParentHeight(cm: number) {
     return Number.isFinite(cm) && cm >= 100 && cm <= 250;
+  }
+
+  function isValidChildHeight(cm: number) {
+    return Number.isFinite(cm) && cm >= 80 && cm <= 220;
+  }
+
+  function isValidWeightKg(kg: number) {
+    return Number.isFinite(kg) && kg >= 10 && kg <= 150;
+  }
+
+  function parseHeightPair(
+    feetValue: string,
+    inchesValue: string,
+    label: string
+  ): { ok: true; cm: number } | { ok: false; message: string } {
+    if (feetValue === "" || inchesValue === "") {
+      return { ok: false, message: `Please enter ${label}.` };
+    }
+
+    const feet = Number(feetValue);
+    const inches = Number(inchesValue);
+
+    if (!Number.isFinite(feet) || !Number.isFinite(inches)) {
+      return { ok: false, message: "Please enter valid numbers." };
+    }
+
+    if (feet < 0 || inches < 0 || inches >= 12) {
+      return { ok: false, message: "Inches must be between 0 and 11." };
+    }
+
+    return { ok: true, cm: feetInchesToCm(feet, inches) };
   }
 
   function calculateHeight() {
     setError("");
     setResult(null);
 
+    if (!age) {
+      setError("Please enter the child's current age.");
+      return;
+    }
+
+    const ageYears = Number(age);
+    if (!Number.isFinite(ageYears)) {
+      setError("Please enter a valid age.");
+      return;
+    }
+
+    if (ageYears < MIN_AGE || ageYears > MAX_AGE) {
+      setError(
+        `Khamis-Roche estimates require an age between ${MIN_AGE} and ${MAX_AGE} years.`
+      );
+      return;
+    }
+
+    let childHeightCm: number;
+    let childWeightKg: number;
     let fatherHeightCm: number;
     let motherHeightCm: number;
 
     if (unit === "cm") {
+      if (!childCm) {
+        setError("Please enter the child's current height.");
+        return;
+      }
+      if (!weightKg) {
+        setError("Please enter the child's current weight.");
+        return;
+      }
       if (!fatherCm || !motherCm) {
         setError("Please enter both parents' heights.");
         return;
       }
 
+      childHeightCm = Number(childCm);
+      childWeightKg = Number(weightKg);
       fatherHeightCm = Number(fatherCm);
       motherHeightCm = Number(motherCm);
     } else {
-      if (
-        fatherFeet === "" ||
-        fatherInches === "" ||
-        motherFeet === "" ||
-        motherInches === ""
-      ) {
-        setError("Please enter both parents' heights.");
+      const childHeight = parseHeightPair(
+        childFeet,
+        childInches,
+        "the child's current height"
+      );
+      if (!childHeight.ok) {
+        setError(childHeight.message);
         return;
       }
 
-      const fatherFt = Number(fatherFeet);
-      const fatherIn = Number(fatherInches);
-      const motherFt = Number(motherFeet);
-      const motherIn = Number(motherInches);
+      if (!weightLb) {
+        setError("Please enter the child's current weight.");
+        return;
+      }
 
-      if (
-        !Number.isFinite(fatherFt) ||
-        !Number.isFinite(fatherIn) ||
-        !Number.isFinite(motherFt) ||
-        !Number.isFinite(motherIn)
-      ) {
+      const weight = Number(weightLb);
+      if (!Number.isFinite(weight)) {
         setError("Please enter valid numbers.");
         return;
       }
 
-      if (
-        fatherFt < 0 ||
-        motherFt < 0 ||
-        fatherIn < 0 ||
-        fatherIn >= 12 ||
-        motherIn < 0 ||
-        motherIn >= 12
-      ) {
-        setError("Inches must be between 0 and 11.");
+      const fatherHeight = parseHeightPair(
+        fatherFeet,
+        fatherInches,
+        "both parents' heights"
+      );
+      if (!fatherHeight.ok) {
+        setError(fatherHeight.message);
         return;
       }
 
-      fatherHeightCm = feetInchesToCm(fatherFt, fatherIn);
-      motherHeightCm = feetInchesToCm(motherFt, motherIn);
+      const motherHeight = parseHeightPair(
+        motherFeet,
+        motherInches,
+        "both parents' heights"
+      );
+      if (!motherHeight.ok) {
+        setError(motherHeight.message);
+        return;
+      }
+
+      childHeightCm = childHeight.cm;
+      childWeightKg = lbToKg(weight);
+      fatherHeightCm = fatherHeight.cm;
+      motherHeightCm = motherHeight.cm;
+    }
+
+    if (!isValidChildHeight(childHeightCm)) {
+      setError("Please enter a realistic child height between 80 cm and 220 cm.");
+      return;
+    }
+
+    if (!isValidWeightKg(childWeightKg)) {
+      setError("Please enter a realistic child weight between 10 kg and 150 kg.");
+      return;
     }
 
     if (
@@ -122,23 +218,25 @@ export default function ChildHeightCalculatorPage() {
       return;
     }
 
-    // Mid-parental height estimate:
-    //
-    // Boy:
-    // (Father height + Mother height + 13 cm) / 2
-    //
-    // Girl:
-    // (Father height + Mother height - 13 cm) / 2
-
-    const estimatedHeight =
-      gender === "boy"
-        ? (fatherHeightCm + motherHeightCm + HEIGHT_ADJUSTMENT_CM) / 2
-        : (fatherHeightCm + motherHeightCm - HEIGHT_ADJUSTMENT_CM) / 2;
+    const estimatedHeight = predictAdultHeightCm({
+      sex: gender,
+      ageYears,
+      childHeightCm,
+      childWeightKg,
+      fatherHeightCm,
+      motherHeightCm,
+    });
 
     setResult(estimatedHeight);
   }
 
   function resetCalculator() {
+    setAge("");
+    setChildCm("");
+    setChildFeet("");
+    setChildInches("");
+    setWeightKg("");
+    setWeightLb("");
     setFatherCm("");
     setMotherCm("");
     setFatherFeet("");
@@ -150,6 +248,21 @@ export default function ChildHeightCalculatorPage() {
   }
 
   function switchUnit(nextUnit: Unit) {
+    if (nextUnit === unit) return;
+
+    // Convert child weight between metric and imperial when switching units
+    if (nextUnit === "ft" && weightKg) {
+      const kg = Number(weightKg);
+      if (Number.isFinite(kg)) {
+        setWeightLb((Math.round(kgToLb(kg) * 10) / 10).toString());
+      }
+    } else if (nextUnit === "cm" && weightLb) {
+      const lb = Number(weightLb);
+      if (Number.isFinite(lb)) {
+        setWeightKg((Math.round(lbToKg(lb) * 10) / 10).toString());
+      }
+    }
+
     setUnit(nextUnit);
     setResult(null);
     setError("");
@@ -165,7 +278,8 @@ export default function ChildHeightCalculatorPage() {
             </h1>
 
             <p className="mt-2 text-sm leading-6 text-gray-600">
-              Estimate a child&apos;s potential adult height using the
+              Estimate a child&apos;s potential adult height with the
+              Khamis-Roche method using age, current height, weight, and
               parents&apos; heights.
             </p>
           </header>
@@ -173,7 +287,7 @@ export default function ChildHeightCalculatorPage() {
           {/* Unit selector */}
           <div className="mb-6">
             <p className="mb-2 text-sm font-medium text-gray-700">
-              Height unit
+              Height &amp; weight units
             </p>
 
             <div className="grid grid-cols-2 rounded-xl bg-gray-100 p-1">
@@ -186,7 +300,7 @@ export default function ChildHeightCalculatorPage() {
                     : "text-gray-500 hover:text-gray-900"
                 }`}
               >
-                Centimeters
+                cm / kg
               </button>
 
               <button
@@ -198,12 +312,157 @@ export default function ChildHeightCalculatorPage() {
                     : "text-gray-500 hover:text-gray-900"
                 }`}
               >
-                Feet / Inches
+                ft / lb
               </button>
             </div>
           </div>
 
           <div className="space-y-5">
+            {/* Current age */}
+            <div>
+              <label
+                htmlFor="age"
+                className="mb-2 block text-sm font-medium text-gray-800"
+              >
+                Current Age
+              </label>
+
+              <div className="relative">
+                <input
+                  id="age"
+                  type="number"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  placeholder="10"
+                  min={MIN_AGE}
+                  max={MAX_AGE}
+                  step="0.1"
+                  inputMode="decimal"
+                  aria-label="Child's current age in years"
+                  className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-16 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                />
+
+                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+                  years
+                </span>
+              </div>
+
+              <p className="mt-1.5 text-xs text-gray-500">
+                Ages {MIN_AGE}–{MAX_AGE} years are supported.
+              </p>
+            </div>
+
+            {/* Current height */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-800">
+                Current Height
+              </label>
+
+              {unit === "cm" ? (
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={childCm}
+                    onChange={(e) => setChildCm(e.target.value)}
+                    placeholder="140"
+                    min="80"
+                    max="220"
+                    step="0.1"
+                    inputMode="decimal"
+                    aria-label="Child's current height in centimeters"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                  />
+
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+                    cm
+                  </span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={childFeet}
+                      onChange={(e) => setChildFeet(e.target.value)}
+                      placeholder="4"
+                      min="0"
+                      inputMode="numeric"
+                      aria-label="Child's height feet"
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-10 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                    />
+
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+                      ft
+                    </span>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={childInches}
+                      onChange={(e) => setChildInches(e.target.value)}
+                      placeholder="7"
+                      min="0"
+                      max="11"
+                      inputMode="numeric"
+                      aria-label="Child's height inches"
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-10 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                    />
+
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+                      in
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Current weight */}
+            <div>
+              <label
+                htmlFor="weight"
+                className="mb-2 block text-sm font-medium text-gray-800"
+              >
+                Current Weight
+              </label>
+
+              <div className="relative">
+                {unit === "cm" ? (
+                  <input
+                    id="weight"
+                    type="number"
+                    value={weightKg}
+                    onChange={(e) => setWeightKg(e.target.value)}
+                    placeholder="35"
+                    min="10"
+                    max="150"
+                    step="0.1"
+                    inputMode="decimal"
+                    aria-label="Child's current weight in kilograms"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                  />
+                ) : (
+                  <input
+                    id="weight"
+                    type="number"
+                    value={weightLb}
+                    onChange={(e) => setWeightLb(e.target.value)}
+                    placeholder="77"
+                    min="22"
+                    max="330"
+                    step="0.1"
+                    inputMode="decimal"
+                    aria-label="Child's current weight in pounds"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                  />
+                )}
+
+                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+                  {unit === "cm" ? "kg" : "lb"}
+                </span>
+              </div>
+            </div>
+
             {/* Father's height */}
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-800">
@@ -347,7 +606,7 @@ export default function ChildHeightCalculatorPage() {
                 id="gender"
                 value={gender}
                 onChange={(e) => {
-                  setGender(e.target.value as Gender);
+                  setGender(e.target.value as ChildSex);
                   setResult(null);
                   setError("");
                 }}
@@ -439,18 +698,23 @@ export default function ChildHeightCalculatorPage() {
 
           <div className="mt-3 space-y-2 text-sm leading-6 text-gray-600">
             <p>
-              <strong className="text-gray-900">Boy:</strong>{" "}
-              (Father&apos;s height + Mother&apos;s height + 13 cm) ÷ 2
+              This tool uses the{" "}
+              <strong className="text-gray-900">Khamis-Roche method</strong>,
+              which predicts adult height from the child&apos;s age, sex,
+              current height, current weight, and mid-parental height — without
+              a bone-age X-ray.
             </p>
 
             <p>
-              <strong className="text-gray-900">Girl:</strong>{" "}
-              (Father&apos;s height + Mother&apos;s height − 13 cm) ÷ 2
+              <strong className="text-gray-900">Formula:</strong> adult height
+              = B₀ + b₁·height + b₂·weight + b₃·mid-parent height, using
+              age- and sex-specific coefficients (ages {MIN_AGE}–{MAX_AGE}).
             </p>
 
             <p>
-              The result is shown with an approximate ±8 cm range. This is
-              not a guarantee of final adult height.
+              The result is shown with an approximate ±{rangeCm} cm range for{" "}
+              {gender === "boy" ? "boys" : "girls"}. This is not a guarantee of
+              final adult height.
             </p>
           </div>
         </div>
