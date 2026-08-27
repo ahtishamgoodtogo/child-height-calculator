@@ -24,6 +24,11 @@ type FieldErrors = Partial<Record<FieldKey, string>>;
 const AAHG_MIN_CM = 5;
 const AAHG_MAX_CM = 9;
 
+const AGE_OPTIONS = Array.from(
+  { length: Math.round((MAX_AGE - MIN_AGE) / 0.5) + 1 },
+  (_, i) => Number((MIN_AGE + i * 0.5).toFixed(1))
+);
+
 const REQUIRED_MARK = (
   <span className="ml-0.5 text-red-600" aria-hidden="true">
     *
@@ -339,7 +344,7 @@ export default function ChildHeightCalculatorPage() {
               <button
                 type="button"
                 onClick={() => switchUnit("cm")}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition ${
                   unit === "cm"
                     ? "bg-white text-gray-900 shadow-sm"
                     : "text-gray-500 hover:text-gray-900"
@@ -351,7 +356,7 @@ export default function ChildHeightCalculatorPage() {
               <button
                 type="button"
                 onClick={() => switchUnit("ft")}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition ${
                   unit === "ft"
                     ? "bg-white text-gray-900 shadow-sm"
                     : "text-gray-500 hover:text-gray-900"
@@ -378,32 +383,29 @@ export default function ChildHeightCalculatorPage() {
                 {REQUIRED_MARK}
               </label>
 
-              <div className="relative">
-                <input
-                  id="age"
-                  type="number"
-                  value={age}
-                  onChange={(e) => {
-                    setAge(e.target.value);
-                    clearFieldError("age");
-                  }}
-                  placeholder="10"
-                  min={MIN_AGE}
-                  max={MAX_AGE}
-                  step="0.1"
-                  required
-                  inputMode="decimal"
-                  aria-required="true"
-                  aria-invalid={Boolean(fieldErrors.age)}
-                  aria-describedby={fieldErrors.age ? "age-error" : undefined}
-                  aria-label="Child's current age in years"
-                  className={inputClassName(Boolean(fieldErrors.age), "pr-16")}
-                />
-
-                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
-                  years
-                </span>
-              </div>
+              <select
+                id="age"
+                value={age}
+                onChange={(e) => {
+                  setAge(e.target.value);
+                  clearFieldError("age");
+                }}
+                required
+                aria-required="true"
+                aria-invalid={Boolean(fieldErrors.age)}
+                aria-describedby={fieldErrors.age ? "age-error" : undefined}
+                aria-label="Child's current age in years"
+                className={inputClassName(Boolean(fieldErrors.age), "bg-white")}
+              >
+                <option value="" disabled>
+                  Select age
+                </option>
+                {AGE_OPTIONS.map((years) => (
+                  <option key={years} value={String(years)}>
+                    {years.toFixed(1)} years
+                  </option>
+                ))}
+              </select>
 
               {fieldErrors.age ? (
                 <p id="age-error" className="mt-1.5 text-xs text-red-600">
@@ -411,7 +413,7 @@ export default function ChildHeightCalculatorPage() {
                 </p>
               ) : (
                 <p className="mt-1.5 text-xs text-gray-500">
-                  Ages {MIN_AGE}–{MAX_AGE} years are supported.
+                  Ages {MIN_AGE}–{MAX_AGE} years, in 0.5-year steps.
                 </p>
               )}
             </div>
@@ -861,6 +863,14 @@ export default function ChildHeightCalculatorPage() {
               )}
             </div>
 
+            <button
+              type="button"
+              onClick={calculateHeight}
+              className="w-full cursor-pointer rounded-xl bg-gray-950 px-5 py-3.5 font-semibold text-white transition hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+            >
+              Calculate Potential Height
+            </button>
+
             {/* Using AAHG (optional) */}
             <div>
               <p className="mb-2 text-sm font-medium text-gray-800">
@@ -871,7 +881,7 @@ export default function ChildHeightCalculatorPage() {
                 <button
                   type="button"
                   onClick={() => setUsingAAHG(false)}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                  className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition ${
                     !usingAAHG
                       ? "bg-white text-gray-900 shadow-sm"
                       : "text-gray-500 hover:text-gray-900"
@@ -883,7 +893,7 @@ export default function ChildHeightCalculatorPage() {
                 <button
                   type="button"
                   onClick={() => setUsingAAHG(true)}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                  className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition ${
                     usingAAHG
                       ? "bg-white text-gray-900 shadow-sm"
                       : "text-gray-500 hover:text-gray-900"
@@ -898,14 +908,6 @@ export default function ChildHeightCalculatorPage() {
                 change the base prediction.
               </p>
             </div>
-
-            <button
-              type="button"
-              onClick={calculateHeight}
-              className="w-full rounded-xl bg-gray-950 px-5 py-3.5 font-semibold text-white transition hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
-            >
-              Calculate Potential Height
-            </button>
           </div>
 
           {/* Result */}
@@ -975,7 +977,7 @@ export default function ChildHeightCalculatorPage() {
               <button
                 type="button"
                 onClick={resetCalculator}
-                className="mt-4 text-sm font-medium text-gray-700 underline underline-offset-4 hover:text-gray-950"
+                className="mt-4 cursor-pointer text-sm font-medium text-gray-700 underline underline-offset-4 hover:text-gray-950"
               >
                 Calculate again
               </button>
