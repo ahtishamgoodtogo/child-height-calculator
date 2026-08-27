@@ -11,6 +11,30 @@ import {
 
 type Unit = "cm" | "ft";
 
+type FieldKey =
+  | "age"
+  | "childHeight"
+  | "weight"
+  | "fatherHeight"
+  | "motherHeight"
+  | "gender";
+
+type FieldErrors = Partial<Record<FieldKey, string>>;
+
+const REQUIRED_MARK = (
+  <span className="ml-0.5 text-red-600" aria-hidden="true">
+    *
+  </span>
+);
+
+function inputClassName(hasError: boolean, extra = "") {
+  return `w-full rounded-xl border px-4 py-3 outline-none transition focus:ring-2 ${
+    hasError
+      ? "border-red-400 focus:border-red-500 focus:ring-red-100"
+      : "border-gray-300 focus:border-gray-900 focus:ring-gray-200"
+  } ${extra}`;
+}
+
 function feetInchesToCm(feet: number, inches: number) {
   return (feet * 12 + inches) * 2.54;
 }
@@ -59,7 +83,7 @@ export default function ChildHeightCalculatorPage() {
   const [motherInches, setMotherInches] = useState("");
 
   const [result, setResult] = useState<number | null>(null);
-  const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const resultImperial = useMemo(() => {
     if (result === null) return null;
@@ -69,6 +93,15 @@ export default function ChildHeightCalculatorPage() {
   const rangeCm = estimatedRangeCm(gender);
   const minHeight = result !== null ? result - rangeCm : null;
   const maxHeight = result !== null ? result + rangeCm : null;
+
+  function clearFieldError(field: FieldKey) {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
 
   function isValidParentHeight(cm: number) {
     return Number.isFinite(cm) && cm >= 100 && cm <= 250;
@@ -84,11 +117,10 @@ export default function ChildHeightCalculatorPage() {
 
   function parseHeightPair(
     feetValue: string,
-    inchesValue: string,
-    label: string
+    inchesValue: string
   ): { ok: true; cm: number } | { ok: false; message: string } {
     if (feetValue === "" || inchesValue === "") {
-      return { ok: false, message: `Please enter ${label}.` };
+      return { ok: false, message: "This field is required." };
     }
 
     const feet = Number(feetValue);
@@ -106,115 +138,120 @@ export default function ChildHeightCalculatorPage() {
   }
 
   function calculateHeight() {
-    setError("");
     setResult(null);
 
-    if (!age) {
-      setError("Please enter the child's current age.");
-      return;
+    const errors: FieldErrors = {};
+
+    let ageYears = NaN;
+    let childHeightCm = NaN;
+    let childWeightKg = NaN;
+    let fatherHeightCm = NaN;
+    let motherHeightCm = NaN;
+
+    if (!age.trim()) {
+      errors.age = "This field is required.";
+    } else {
+      ageYears = Number(age);
+      if (!Number.isFinite(ageYears)) {
+        errors.age = "Please enter a valid age.";
+      } else if (ageYears < MIN_AGE || ageYears > MAX_AGE) {
+        errors.age = `Age must be between ${MIN_AGE} and ${MAX_AGE} years.`;
+      }
     }
 
-    const ageYears = Number(age);
-    if (!Number.isFinite(ageYears)) {
-      setError("Please enter a valid age.");
-      return;
+    if (!gender) {
+      errors.gender = "This field is required.";
     }
-
-    if (ageYears < MIN_AGE || ageYears > MAX_AGE) {
-      setError(
-        `Khamis-Roche estimates require an age between ${MIN_AGE} and ${MAX_AGE} years.`
-      );
-      return;
-    }
-
-    let childHeightCm: number;
-    let childWeightKg: number;
-    let fatherHeightCm: number;
-    let motherHeightCm: number;
 
     if (unit === "cm") {
-      if (!childCm) {
-        setError("Please enter the child's current height.");
-        return;
-      }
-      if (!weightKg) {
-        setError("Please enter the child's current weight.");
-        return;
-      }
-      if (!fatherCm || !motherCm) {
-        setError("Please enter both parents' heights.");
-        return;
+      if (!childCm.trim()) {
+        errors.childHeight = "This field is required.";
+      } else {
+        childHeightCm = Number(childCm);
+        if (!isValidChildHeight(childHeightCm)) {
+          errors.childHeight =
+            "Enter a realistic height between 80 cm and 220 cm.";
+        }
       }
 
-      childHeightCm = Number(childCm);
-      childWeightKg = Number(weightKg);
-      fatherHeightCm = Number(fatherCm);
-      motherHeightCm = Number(motherCm);
+      if (!weightKg.trim()) {
+        errors.weight = "This field is required.";
+      } else {
+        childWeightKg = Number(weightKg);
+        if (!isValidWeightKg(childWeightKg)) {
+          errors.weight = "Enter a realistic weight between 10 kg and 150 kg.";
+        }
+      }
+
+      if (!fatherCm.trim()) {
+        errors.fatherHeight = "This field is required.";
+      } else {
+        fatherHeightCm = Number(fatherCm);
+        if (!isValidParentHeight(fatherHeightCm)) {
+          errors.fatherHeight =
+            "Enter a realistic height between 100 cm and 250 cm.";
+        }
+      }
+
+      if (!motherCm.trim()) {
+        errors.motherHeight = "This field is required.";
+      } else {
+        motherHeightCm = Number(motherCm);
+        if (!isValidParentHeight(motherHeightCm)) {
+          errors.motherHeight =
+            "Enter a realistic height between 100 cm and 250 cm.";
+        }
+      }
     } else {
-      const childHeight = parseHeightPair(
-        childFeet,
-        childInches,
-        "the child's current height"
-      );
+      const childHeight = parseHeightPair(childFeet, childInches);
       if (!childHeight.ok) {
-        setError(childHeight.message);
-        return;
+        errors.childHeight = childHeight.message;
+      } else if (!isValidChildHeight(childHeight.cm)) {
+        errors.childHeight =
+          "Enter a realistic height between 80 cm and 220 cm.";
+      } else {
+        childHeightCm = childHeight.cm;
       }
 
-      if (!weightLb) {
-        setError("Please enter the child's current weight.");
-        return;
+      if (!weightLb.trim()) {
+        errors.weight = "This field is required.";
+      } else {
+        const weight = Number(weightLb);
+        if (!Number.isFinite(weight)) {
+          errors.weight = "Please enter a valid weight.";
+        } else {
+          childWeightKg = lbToKg(weight);
+          if (!isValidWeightKg(childWeightKg)) {
+            errors.weight =
+              "Enter a realistic weight between 10 kg and 150 kg.";
+          }
+        }
       }
 
-      const weight = Number(weightLb);
-      if (!Number.isFinite(weight)) {
-        setError("Please enter valid numbers.");
-        return;
-      }
-
-      const fatherHeight = parseHeightPair(
-        fatherFeet,
-        fatherInches,
-        "both parents' heights"
-      );
+      const fatherHeight = parseHeightPair(fatherFeet, fatherInches);
       if (!fatherHeight.ok) {
-        setError(fatherHeight.message);
-        return;
+        errors.fatherHeight = fatherHeight.message;
+      } else if (!isValidParentHeight(fatherHeight.cm)) {
+        errors.fatherHeight =
+          "Enter a realistic height between 100 cm and 250 cm.";
+      } else {
+        fatherHeightCm = fatherHeight.cm;
       }
 
-      const motherHeight = parseHeightPair(
-        motherFeet,
-        motherInches,
-        "both parents' heights"
-      );
+      const motherHeight = parseHeightPair(motherFeet, motherInches);
       if (!motherHeight.ok) {
-        setError(motherHeight.message);
-        return;
+        errors.motherHeight = motherHeight.message;
+      } else if (!isValidParentHeight(motherHeight.cm)) {
+        errors.motherHeight =
+          "Enter a realistic height between 100 cm and 250 cm.";
+      } else {
+        motherHeightCm = motherHeight.cm;
       }
-
-      childHeightCm = childHeight.cm;
-      childWeightKg = lbToKg(weight);
-      fatherHeightCm = fatherHeight.cm;
-      motherHeightCm = motherHeight.cm;
     }
 
-    if (!isValidChildHeight(childHeightCm)) {
-      setError("Please enter a realistic child height between 80 cm and 220 cm.");
-      return;
-    }
+    setFieldErrors(errors);
 
-    if (!isValidWeightKg(childWeightKg)) {
-      setError("Please enter a realistic child weight between 10 kg and 150 kg.");
-      return;
-    }
-
-    if (
-      !isValidParentHeight(fatherHeightCm) ||
-      !isValidParentHeight(motherHeightCm)
-    ) {
-      setError(
-        "Please enter realistic parent heights between 100 cm and 250 cm."
-      );
+    if (Object.keys(errors).length > 0) {
       return;
     }
 
@@ -244,7 +281,7 @@ export default function ChildHeightCalculatorPage() {
     setMotherFeet("");
     setMotherInches("");
     setResult(null);
-    setError("");
+    setFieldErrors({});
   }
 
   function switchUnit(nextUnit: Unit) {
@@ -265,7 +302,7 @@ export default function ChildHeightCalculatorPage() {
 
     setUnit(nextUnit);
     setResult(null);
-    setError("");
+    setFieldErrors({});
   }
 
   return (
@@ -317,6 +354,11 @@ export default function ChildHeightCalculatorPage() {
             </div>
           </div>
 
+          <p className="mb-4 text-xs text-gray-500">
+            Fields marked with <span className="text-red-600">*</span> are
+            required.
+          </p>
+
           <div className="space-y-5">
             {/* Current age */}
             <div>
@@ -325,6 +367,7 @@ export default function ChildHeightCalculatorPage() {
                 className="mb-2 block text-sm font-medium text-gray-800"
               >
                 Current Age
+                {REQUIRED_MARK}
               </label>
 
               <div className="relative">
@@ -332,14 +375,21 @@ export default function ChildHeightCalculatorPage() {
                   id="age"
                   type="number"
                   value={age}
-                  onChange={(e) => setAge(e.target.value)}
+                  onChange={(e) => {
+                    setAge(e.target.value);
+                    clearFieldError("age");
+                  }}
                   placeholder="10"
                   min={MIN_AGE}
                   max={MAX_AGE}
                   step="0.1"
+                  required
                   inputMode="decimal"
+                  aria-required="true"
+                  aria-invalid={Boolean(fieldErrors.age)}
+                  aria-describedby={fieldErrors.age ? "age-error" : undefined}
                   aria-label="Child's current age in years"
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-16 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                  className={inputClassName(Boolean(fieldErrors.age), "pr-16")}
                 />
 
                 <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -347,15 +397,22 @@ export default function ChildHeightCalculatorPage() {
                 </span>
               </div>
 
-              <p className="mt-1.5 text-xs text-gray-500">
-                Ages {MIN_AGE}–{MAX_AGE} years are supported.
-              </p>
+              {fieldErrors.age ? (
+                <p id="age-error" className="mt-1.5 text-xs text-red-600">
+                  {fieldErrors.age}
+                </p>
+              ) : (
+                <p className="mt-1.5 text-xs text-gray-500">
+                  Ages {MIN_AGE}–{MAX_AGE} years are supported.
+                </p>
+              )}
             </div>
 
             {/* Current height */}
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-800">
                 Current Height
+                {REQUIRED_MARK}
               </label>
 
               {unit === "cm" ? (
@@ -363,14 +420,26 @@ export default function ChildHeightCalculatorPage() {
                   <input
                     type="number"
                     value={childCm}
-                    onChange={(e) => setChildCm(e.target.value)}
+                    onChange={(e) => {
+                      setChildCm(e.target.value);
+                      clearFieldError("childHeight");
+                    }}
                     placeholder="140"
                     min="80"
                     max="220"
                     step="0.1"
+                    required
                     inputMode="decimal"
+                    aria-required="true"
+                    aria-invalid={Boolean(fieldErrors.childHeight)}
+                    aria-describedby={
+                      fieldErrors.childHeight ? "child-height-error" : undefined
+                    }
                     aria-label="Child's current height in centimeters"
-                    className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                    className={inputClassName(
+                      Boolean(fieldErrors.childHeight),
+                      "pr-12"
+                    )}
                   />
 
                   <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -383,12 +452,21 @@ export default function ChildHeightCalculatorPage() {
                     <input
                       type="number"
                       value={childFeet}
-                      onChange={(e) => setChildFeet(e.target.value)}
+                      onChange={(e) => {
+                        setChildFeet(e.target.value);
+                        clearFieldError("childHeight");
+                      }}
                       placeholder="4"
                       min="0"
+                      required
                       inputMode="numeric"
+                      aria-required="true"
+                      aria-invalid={Boolean(fieldErrors.childHeight)}
                       aria-label="Child's height feet"
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-10 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                      className={inputClassName(
+                        Boolean(fieldErrors.childHeight),
+                        "pr-10"
+                      )}
                     />
 
                     <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -400,13 +478,27 @@ export default function ChildHeightCalculatorPage() {
                     <input
                       type="number"
                       value={childInches}
-                      onChange={(e) => setChildInches(e.target.value)}
+                      onChange={(e) => {
+                        setChildInches(e.target.value);
+                        clearFieldError("childHeight");
+                      }}
                       placeholder="7"
                       min="0"
                       max="11"
+                      required
                       inputMode="numeric"
+                      aria-required="true"
+                      aria-invalid={Boolean(fieldErrors.childHeight)}
+                      aria-describedby={
+                        fieldErrors.childHeight
+                          ? "child-height-error"
+                          : undefined
+                      }
                       aria-label="Child's height inches"
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-10 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                      className={inputClassName(
+                        Boolean(fieldErrors.childHeight),
+                        "pr-10"
+                      )}
                     />
 
                     <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -414,6 +506,12 @@ export default function ChildHeightCalculatorPage() {
                     </span>
                   </div>
                 </div>
+              )}
+
+              {fieldErrors.childHeight && (
+                <p id="child-height-error" className="mt-1.5 text-xs text-red-600">
+                  {fieldErrors.childHeight}
+                </p>
               )}
             </div>
 
@@ -424,6 +522,7 @@ export default function ChildHeightCalculatorPage() {
                 className="mb-2 block text-sm font-medium text-gray-800"
               >
                 Current Weight
+                {REQUIRED_MARK}
               </label>
 
               <div className="relative">
@@ -432,28 +531,52 @@ export default function ChildHeightCalculatorPage() {
                     id="weight"
                     type="number"
                     value={weightKg}
-                    onChange={(e) => setWeightKg(e.target.value)}
+                    onChange={(e) => {
+                      setWeightKg(e.target.value);
+                      clearFieldError("weight");
+                    }}
                     placeholder="35"
                     min="10"
                     max="150"
                     step="0.1"
+                    required
                     inputMode="decimal"
+                    aria-required="true"
+                    aria-invalid={Boolean(fieldErrors.weight)}
+                    aria-describedby={
+                      fieldErrors.weight ? "weight-error" : undefined
+                    }
                     aria-label="Child's current weight in kilograms"
-                    className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                    className={inputClassName(
+                      Boolean(fieldErrors.weight),
+                      "pr-12"
+                    )}
                   />
                 ) : (
                   <input
                     id="weight"
                     type="number"
                     value={weightLb}
-                    onChange={(e) => setWeightLb(e.target.value)}
+                    onChange={(e) => {
+                      setWeightLb(e.target.value);
+                      clearFieldError("weight");
+                    }}
                     placeholder="77"
                     min="22"
                     max="330"
                     step="0.1"
+                    required
                     inputMode="decimal"
+                    aria-required="true"
+                    aria-invalid={Boolean(fieldErrors.weight)}
+                    aria-describedby={
+                      fieldErrors.weight ? "weight-error" : undefined
+                    }
                     aria-label="Child's current weight in pounds"
-                    className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                    className={inputClassName(
+                      Boolean(fieldErrors.weight),
+                      "pr-12"
+                    )}
                   />
                 )}
 
@@ -461,12 +584,19 @@ export default function ChildHeightCalculatorPage() {
                   {unit === "cm" ? "kg" : "lb"}
                 </span>
               </div>
+
+              {fieldErrors.weight && (
+                <p id="weight-error" className="mt-1.5 text-xs text-red-600">
+                  {fieldErrors.weight}
+                </p>
+              )}
             </div>
 
             {/* Father's height */}
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-800">
                 Father&apos;s Height
+                {REQUIRED_MARK}
               </label>
 
               {unit === "cm" ? (
@@ -474,14 +604,28 @@ export default function ChildHeightCalculatorPage() {
                   <input
                     type="number"
                     value={fatherCm}
-                    onChange={(e) => setFatherCm(e.target.value)}
+                    onChange={(e) => {
+                      setFatherCm(e.target.value);
+                      clearFieldError("fatherHeight");
+                    }}
                     placeholder="180"
                     min="100"
                     max="250"
                     step="0.1"
+                    required
                     inputMode="decimal"
+                    aria-required="true"
+                    aria-invalid={Boolean(fieldErrors.fatherHeight)}
+                    aria-describedby={
+                      fieldErrors.fatherHeight
+                        ? "father-height-error"
+                        : undefined
+                    }
                     aria-label="Father's height in centimeters"
-                    className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                    className={inputClassName(
+                      Boolean(fieldErrors.fatherHeight),
+                      "pr-12"
+                    )}
                   />
 
                   <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -494,12 +638,21 @@ export default function ChildHeightCalculatorPage() {
                     <input
                       type="number"
                       value={fatherFeet}
-                      onChange={(e) => setFatherFeet(e.target.value)}
+                      onChange={(e) => {
+                        setFatherFeet(e.target.value);
+                        clearFieldError("fatherHeight");
+                      }}
                       placeholder="5"
                       min="0"
+                      required
                       inputMode="numeric"
+                      aria-required="true"
+                      aria-invalid={Boolean(fieldErrors.fatherHeight)}
                       aria-label="Father's height feet"
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-10 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                      className={inputClassName(
+                        Boolean(fieldErrors.fatherHeight),
+                        "pr-10"
+                      )}
                     />
 
                     <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -511,13 +664,27 @@ export default function ChildHeightCalculatorPage() {
                     <input
                       type="number"
                       value={fatherInches}
-                      onChange={(e) => setFatherInches(e.target.value)}
+                      onChange={(e) => {
+                        setFatherInches(e.target.value);
+                        clearFieldError("fatherHeight");
+                      }}
                       placeholder="11"
                       min="0"
                       max="11"
+                      required
                       inputMode="numeric"
+                      aria-required="true"
+                      aria-invalid={Boolean(fieldErrors.fatherHeight)}
+                      aria-describedby={
+                        fieldErrors.fatherHeight
+                          ? "father-height-error"
+                          : undefined
+                      }
                       aria-label="Father's height inches"
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-10 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                      className={inputClassName(
+                        Boolean(fieldErrors.fatherHeight),
+                        "pr-10"
+                      )}
                     />
 
                     <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -526,12 +693,22 @@ export default function ChildHeightCalculatorPage() {
                   </div>
                 </div>
               )}
+
+              {fieldErrors.fatherHeight && (
+                <p
+                  id="father-height-error"
+                  className="mt-1.5 text-xs text-red-600"
+                >
+                  {fieldErrors.fatherHeight}
+                </p>
+              )}
             </div>
 
             {/* Mother's height */}
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-800">
                 Mother&apos;s Height
+                {REQUIRED_MARK}
               </label>
 
               {unit === "cm" ? (
@@ -539,14 +716,28 @@ export default function ChildHeightCalculatorPage() {
                   <input
                     type="number"
                     value={motherCm}
-                    onChange={(e) => setMotherCm(e.target.value)}
+                    onChange={(e) => {
+                      setMotherCm(e.target.value);
+                      clearFieldError("motherHeight");
+                    }}
                     placeholder="165"
                     min="100"
                     max="250"
                     step="0.1"
+                    required
                     inputMode="decimal"
+                    aria-required="true"
+                    aria-invalid={Boolean(fieldErrors.motherHeight)}
+                    aria-describedby={
+                      fieldErrors.motherHeight
+                        ? "mother-height-error"
+                        : undefined
+                    }
                     aria-label="Mother's height in centimeters"
-                    className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                    className={inputClassName(
+                      Boolean(fieldErrors.motherHeight),
+                      "pr-12"
+                    )}
                   />
 
                   <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -559,12 +750,21 @@ export default function ChildHeightCalculatorPage() {
                     <input
                       type="number"
                       value={motherFeet}
-                      onChange={(e) => setMotherFeet(e.target.value)}
+                      onChange={(e) => {
+                        setMotherFeet(e.target.value);
+                        clearFieldError("motherHeight");
+                      }}
                       placeholder="5"
                       min="0"
+                      required
                       inputMode="numeric"
+                      aria-required="true"
+                      aria-invalid={Boolean(fieldErrors.motherHeight)}
                       aria-label="Mother's height feet"
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-10 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                      className={inputClassName(
+                        Boolean(fieldErrors.motherHeight),
+                        "pr-10"
+                      )}
                     />
 
                     <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -576,13 +776,27 @@ export default function ChildHeightCalculatorPage() {
                     <input
                       type="number"
                       value={motherInches}
-                      onChange={(e) => setMotherInches(e.target.value)}
+                      onChange={(e) => {
+                        setMotherInches(e.target.value);
+                        clearFieldError("motherHeight");
+                      }}
                       placeholder="5"
                       min="0"
                       max="11"
+                      required
                       inputMode="numeric"
+                      aria-required="true"
+                      aria-invalid={Boolean(fieldErrors.motherHeight)}
+                      aria-describedby={
+                        fieldErrors.motherHeight
+                          ? "mother-height-error"
+                          : undefined
+                      }
                       aria-label="Mother's height inches"
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-10 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                      className={inputClassName(
+                        Boolean(fieldErrors.motherHeight),
+                        "pr-10"
+                      )}
                     />
 
                     <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -590,6 +804,15 @@ export default function ChildHeightCalculatorPage() {
                     </span>
                   </div>
                 </div>
+              )}
+
+              {fieldErrors.motherHeight && (
+                <p
+                  id="mother-height-error"
+                  className="mt-1.5 text-xs text-red-600"
+                >
+                  {fieldErrors.motherHeight}
+                </p>
               )}
             </div>
 
@@ -600,6 +823,7 @@ export default function ChildHeightCalculatorPage() {
                 className="mb-2 block text-sm font-medium text-gray-800"
               >
                 Child
+                {REQUIRED_MARK}
               </label>
 
               <select
@@ -607,25 +831,27 @@ export default function ChildHeightCalculatorPage() {
                 value={gender}
                 onChange={(e) => {
                   setGender(e.target.value as ChildSex);
+                  clearFieldError("gender");
                   setResult(null);
-                  setError("");
                 }}
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 outline-none focus:border-gray-900 focus:ring-2 focus:ring-gray-200"
+                required
+                aria-required="true"
+                aria-invalid={Boolean(fieldErrors.gender)}
+                aria-describedby={
+                  fieldErrors.gender ? "gender-error" : undefined
+                }
+                className={inputClassName(Boolean(fieldErrors.gender), "bg-white")}
               >
                 <option value="boy">Boy</option>
                 <option value="girl">Girl</option>
               </select>
-            </div>
 
-            {/* Error */}
-            {error && (
-              <div
-                role="alert"
-                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-              >
-                {error}
-              </div>
-            )}
+              {fieldErrors.gender && (
+                <p id="gender-error" className="mt-1.5 text-xs text-red-600">
+                  {fieldErrors.gender}
+                </p>
+              )}
+            </div>
 
             <button
               type="button"
