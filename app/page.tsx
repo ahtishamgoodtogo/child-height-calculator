@@ -21,6 +21,9 @@ type FieldKey =
 
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
+const AAHG_MIN_CM = 5;
+const AAHG_MAX_CM = 9;
+
 const REQUIRED_MARK = (
   <span className="ml-0.5 text-red-600" aria-hidden="true">
     *
@@ -82,6 +85,7 @@ export default function ChildHeightCalculatorPage() {
   const [motherFeet, setMotherFeet] = useState("");
   const [motherInches, setMotherInches] = useState("");
 
+  const [usingAAHG, setUsingAAHG] = useState(false);
   const [result, setResult] = useState<number | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
@@ -93,6 +97,9 @@ export default function ChildHeightCalculatorPage() {
   const rangeCm = estimatedRangeCm(gender);
   const minHeight = result !== null ? result - rangeCm : null;
   const maxHeight = result !== null ? result + rangeCm : null;
+
+  const aahgMin = result !== null && usingAAHG ? result + AAHG_MIN_CM : null;
+  const aahgMax = result !== null && usingAAHG ? result + AAHG_MAX_CM : null;
 
   function clearFieldError(field: FieldKey) {
     setFieldErrors((prev) => {
@@ -280,6 +287,7 @@ export default function ChildHeightCalculatorPage() {
     setFatherInches("");
     setMotherFeet("");
     setMotherInches("");
+    setUsingAAHG(false);
     setResult(null);
     setFieldErrors({});
   }
@@ -853,6 +861,44 @@ export default function ChildHeightCalculatorPage() {
               )}
             </div>
 
+            {/* Using AAHG (optional) */}
+            <div>
+              <p className="mb-2 text-sm font-medium text-gray-800">
+                Using AAHG?
+              </p>
+
+              <div className="grid grid-cols-2 rounded-xl bg-gray-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setUsingAAHG(false)}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                    !usingAAHG
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  No
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setUsingAAHG(true)}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                    usingAAHG
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  Yes
+                </button>
+              </div>
+
+              <p className="mt-1.5 text-xs text-gray-500">
+                AAHG is an oral + daily high-jump routine. Optional — does not
+                change the base prediction.
+              </p>
+            </div>
+
             <button
               type="button"
               onClick={calculateHeight}
@@ -896,6 +942,27 @@ export default function ChildHeightCalculatorPage() {
                     {cmToFeetInches(maxHeight).feet} ft{" "}
                     {cmToFeetInches(maxHeight).inches} in
                   </p>
+                </div>
+              )}
+
+              {aahgMin !== null && aahgMax !== null && (
+                <div className="mt-5 rounded-xl bg-white p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    AAHG Projected Height
+                  </p>
+
+                  <p className="mt-1 font-semibold text-gray-900">
+                    {aahgMin.toFixed(1)}–{aahgMax.toFixed(1)} cm
+                  </p>
+
+                  {unit === "ft" && (
+                    <p className="mt-1 text-sm text-gray-600">
+                      {cmToFeetInches(aahgMin).feet} ft{" "}
+                      {cmToFeetInches(aahgMin).inches} in –{" "}
+                      {cmToFeetInches(aahgMax).feet} ft{" "}
+                      {cmToFeetInches(aahgMax).inches} in
+                    </p>
+                  )}
                 </div>
               )}
 
